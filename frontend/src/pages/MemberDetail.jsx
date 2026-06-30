@@ -1,112 +1,90 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../utils/api';
 import { FiArrowLeft } from 'react-icons/fi';
+import api from '../lib/api';
+import { inr, fmtDate } from '../lib/format';
+import { Card, Spinner, Empty, Badge } from '../components/ui';
 
-function MemberDetail() {
+export default function MemberDetail() {
   const { id } = useParams();
   const [member, setMember] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchMember();
+    api.get(`/members/${id}`)
+      .then((res) => setMember(res.data.data))
+      .catch(() => setMember(null))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  const fetchMember = async () => {
-    try {
-      const res = await api.get(`/members/${id}`);
-      setMember(res.data.data);
-    } catch (error) {
-      console.error('Failed to fetch member:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="text-center py-10">Loading...</div>;
-  if (!member) return <div className="text-center py-10 text-red-500">Member not found</div>;
+  if (loading) return <Spinner />;
+  if (!member) return <Empty>Member not found</Empty>;
 
   return (
     <div>
-      <Link to="/members" className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 mb-4">
+      <Link to="/members" className="inline-flex items-center gap-2 text-brand-600 hover:text-brand-800 mb-4">
         <FiArrowLeft /> Back to Members
       </Link>
 
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+      <Card className="p-6 mb-6">
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">{member.name}</h1>
-            <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-700 capitalize mt-2 inline-block">
-              {member.committee_role}
-            </span>
+            <div className="mt-2"><Badge value={member.committee_role} /></div>
           </div>
-          <span className={`px-3 py-1 text-sm rounded-full ${member.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {member.is_active ? 'Active' : 'Inactive'}
-          </span>
+          <Badge value={member.is_active ? 'active' : 'unpaid'} />
         </div>
-
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-          <div>
-            <p className="text-sm text-gray-500">Phone</p>
-            <p className="font-medium">{member.phone || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Email</p>
-            <p className="font-medium">{member.email || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Join Date</p>
-            <p className="font-medium">{new Date(member.join_date).toLocaleDateString()}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Address</p>
-            <p className="font-medium">{member.address || '-'}</p>
-          </div>
+          <Info label="Phone" value={member.phone || '-'} />
+          <Info label="Email" value={member.email || '-'} />
+          <Info label="Join Date" value={fmtDate(member.join_date)} />
+          <Info label="Address" value={member.address || '-'} />
         </div>
-      </div>
+      </Card>
 
-      {/* Active Loans */}
-      {member.loans && member.loans.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+      {member.loans?.length > 0 && (
+        <Card className="p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">Loans</h2>
           <div className="space-y-3">
-            {member.loans.map(loan => (
-              <Link key={loan.id} to={`/loans/${loan.id}`} className="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">₹{parseFloat(loan.principal_amount).toLocaleString()}</p>
-                    <p className="text-sm text-gray-500">Rate: {loan.interest_rate}% | EMI: ₹{parseFloat(loan.monthly_payment_amount).toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`px-2 py-1 text-xs rounded-full ${loan.status === 'active' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
-                      {loan.status}
-                    </span>
-                    <p className="text-sm text-gray-500 mt-1">Remaining: ₹{parseFloat(loan.remaining_principal).toLocaleString()}</p>
-                  </div>
+            {member.loans.map((loan) => (
+              <Link key={loan.id} to={`/loans/${loan.id}`} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                <div>
+                  <p className="font-medium">{inr(loan.principal_amount)}</p>
+                  <p className="text-sm text-gray-500">{loan.interest_rate}%/mo · EMI {inr(loan.monthly_payment_amount)}</p>
+                </div>
+                <div className="text-right">
+                  <Badge value={loan.status} />
+                  <p className="text-sm text-gray-500 mt-1">Remaining {inr(loan.remaining_principal)}</p>
                 </div>
               </Link>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Instalment Summary */}
-      {member.instalment_summary && member.instalment_summary.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      {member.instalment_summary?.length > 0 && (
+        <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">Instalment Summary</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {member.instalment_summary.map((s, i) => (
-              <div key={i} className="p-3 bg-gray-50 rounded-lg text-center">
+            {member.instalment_summary.map((s) => (
+              <div key={s.status} className="p-4 bg-gray-50 rounded-lg text-center">
                 <p className="text-lg font-bold capitalize">{s.status}</p>
-                <p className="text-sm text-gray-500">{s.count} months</p>
-                <p className="text-xs text-gray-400">₹{parseFloat(s.total_paid || 0).toLocaleString()} paid</p>
+                <p className="text-sm text-gray-500">{s.count} month(s)</p>
+                <p className="text-xs text-gray-400">{inr(s.total_paid)} paid</p>
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );
 }
 
-export default MemberDetail;
+function Info({ label, value }) {
+  return (
+    <div>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="font-medium break-words">{value}</p>
+    </div>
+  );
+}

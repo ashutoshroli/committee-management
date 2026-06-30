@@ -1,79 +1,61 @@
 const db = require('../config/db');
+const { asyncHandler } = require('../middleware/errorHandler');
 
-exports.getStats = async (req, res) => {
-  try {
-    // Total members
-    const members = await db.query('SELECT COUNT(*) as total, SUM(CASE WHEN is_active THEN 1 ELSE 0 END) as active FROM members');
+exports.getStats = asyncHandler(async (req, res) => {
+  const members = await db.query(
+    'SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active)::int AS active FROM members'
+  );
 
-    // Total fund (sum of all incoming - outgoing)
-    const fund = await db.query(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN transaction_type IN ('instalment_received', 'loan_payment_received', 'fine_received') THEN amount ELSE 0 END), 0) as total_in,
-        COALESCE(SUM(CASE WHEN transaction_type = 'loan_disbursed' THEN amount ELSE 0 END), 0) as total_out
-      FROM fund_transactions
-    `);
+  const fund = await db.query(`
+    SELECT
+      COALESCE(SUM(amount) FILTER (WHERE transaction_type IN
+        ('instalment_received','loan_payment_received','fine_received')), 0) AS total_in,
+      COALESCE(SUM(amount) FILTER (WHERE transaction_type = 'loan_disbursed'), 0) AS total_out
+    FROM fund_transactions
+  `);
+  const totalIn = Number(fund.rows[0].total_in);
+  const totalOut = Number(fund.rows[0].total_out);
 
-    const totalIn = parseFloat(fund.rows[0].total_in);
-    const totalOut = parseFloat(fund.rows[0].total_out);
-    const availableFund = totalIn - totalOut;
+  const loans = await db.query(`
+    SELECT COUNT(*)::int AS active_count,
+           COALESCE(SUM(remaining_principal), 0) AS total_outstanding
+    FROM loans WHERE status = 'active'
+  `);
 
-    // Active loans
-    const loans = await db.query(`
-      SELECT COUNT(*) as total_active, 
-             COALESCE(SUM(remaining_principal), 0) as total_outstanding
-      FROM loans WHERE status = 'active'
-    `);
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
 
-    // Current month collection
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
+  const collection = await db.query(`
+    SELECT
+      COALESCE(SUM(amount), 0) AS expected,
+      COALESCE(SUM(paid_amount), 0) AS collected,
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status = 'paid')::int AS paid,
+      COUNT(*) FILTER (WHERE status IN ('unpaid','late'))::int AS unpaid
+    FROM instalments WHERE month = $1 AND year = $2
+  `, [month, year]);
 
-    const collection = await db.query(`
-      SELECT 
-        COALESCE(SUM(amount), 0) as expected,
-        COALESCE(SUM(paid_amount), 0) as collected,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid,
-        SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END) as unpaid
-      FROM instalments WHERE month = $1 AND year = $2
-    `, [currentMonth, currentYear]);
+  const interest = await db.query('SELECT COALESCE(SUM(total_interest_paid), 0) AS total FROM loans');
 
-    // Total interest earned
-    const interest = await db.query(`
-      SELECT COALESCE(SUM(total_interest_paid), 0) as total_interest FROM loans
-    `);
-
-    res.json({
-      success: true,
-      data: {
-        members: {
-          total: parseInt(members.rows[0].total),
-          active: parseInt(members.rows[0].active)
-        },
-        fund: {
-          total_in: totalIn,
-          total_out: totalOut,
-          available: availableFund
-        },
-        loans: {
-          active_count: parseInt(loans.rows[0].total_active),
-          total_outstanding: parseFloat(loans.rows[0].total_outstanding)
-        },
-        current_month_collection: {
-          month: currentMonth,
-          year: currentYear,
-          expected: parseFloat(collection.rows[0].expected),
-          collected: parseFloat(collection.rows[0].collected),
-          total_members: parseInt(collection.rows[0].total),
-          paid: parseInt(collection.rows[0].paid || 0),
-          unpaid: parseInt(collection.rows[0].unpaid || 0)
-        },
-        total_interest_earned: parseFloat(interest.rows[0].total_interest)
-      }
-    });
-  } catch (error) {
-    console.error('Dashboard stats error:', error);
-    res.status(500).json({ success: false, message: 'Server error.' });
-  }
-};
+  res.json({
+    success: true,
+    data: {
+      members: { total: members.rows[0].total, active: members.rows[0].active },
+      fund: { total_in: totalIn, total_out: totalOut, available: Number((totalIn - totalOut).toFixed(2)) },
+      loans: {
+        active_count: loans.rows[0].active_count,
+        total_outstanding: Number(loans.rows[0].total_outstanding),
+      },
+      current_month_collection: {
+        month, year,
+        expected: Number(collection.rows[0].expected),
+        collected: Number(collection.rows[0].collected),
+        total_members: collection.rows[0].total,
+        paid: collection.rows[0].paid,
+        unpaid: collection.rows[0].unpaid,
+      },
+      total_interest_earned: Number(interest.rows[0].total),
+    },
+  });
+});
