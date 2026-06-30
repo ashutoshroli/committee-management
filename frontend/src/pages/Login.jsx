@@ -1,73 +1,52 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
+import { Field, inputClass } from '../components/ui';
 
-function Login() {
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await login(email, password);
       toast.success('Login successful!');
       navigate('/');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Login failed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900">
-      <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-800 to-brand-900 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Committee Management</h1>
-          <p className="text-gray-500 mt-2">Login to your account</p>
+          <h1 className="text-2xl font-bold text-gray-800">Committee Management</h1>
+          <p className="text-gray-500 mt-1">Sign in to continue</p>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              placeholder="admin@committee.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              placeholder="Enter password"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition font-medium"
-          >
-            {loading ? 'Logging in...' : 'Login'}
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Email">
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+              className={inputClass} placeholder="admin@committee.com" />
+          </Field>
+          <Field label="Password">
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+              className={inputClass} placeholder="Enter password" />
+          </Field>
+          <button type="submit" disabled={loading}
+            className="w-full bg-brand-600 text-white py-2.5 rounded-lg hover:bg-brand-700 disabled:opacity-50 font-medium transition">
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
       </div>
     </div>
   );
 }
-
-export default Login;

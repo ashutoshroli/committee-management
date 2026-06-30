@@ -1,24 +1,23 @@
 const { Pool } = require('pg');
-const dotenv = require('dotenv');
+require('dotenv').config();
 
-dotenv.config();
+if (!process.env.DATABASE_URL) {
+  console.warn('[db] WARNING: DATABASE_URL is not set. Database queries will fail.');
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
-
-pool.on('connect', () => {
-  console.log('Connected to Neon PostgreSQL database');
+  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost')
+    ? false
+    : { rejectUnauthorized: false },
 });
 
 pool.on('error', (err) => {
-  console.error('Database connection error:', err);
+  console.error('[db] Unexpected pool error:', err.message);
 });
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
-  pool
+  getClient: () => pool.connect(),
+  pool,
 };
