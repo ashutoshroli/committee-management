@@ -1,6 +1,6 @@
 # Committee Management System
 
-A full-stack web application for managing a savings committee/chit-fund group with members, monthly instalments, loans (reducing balance interest), and fund tracking.
+A full-stack web app to manage a single savings committee / chit-fund group — members, monthly instalments, loans (reducing-balance interest), and fund tracking.
 
 ## Tech Stack
 
@@ -10,68 +10,71 @@ A full-stack web application for managing a savings committee/chit-fund group wi
 | Backend | Node.js + Express | Render |
 | Frontend | React + Vite + Tailwind CSS | Vercel |
 
-## Project Structure
+## Structure
 
 ```
 committee-management/
-├── db/              → SQL schema & migrations (Neon PostgreSQL)
-├── backend/         → Node.js + Express REST API
-└── frontend/        → React (Vite + Tailwind CSS)
+├── db/
+│   └── schema.sql            # PostgreSQL schema + seed (Neon)
+├── backend/                  # Node.js + Express REST API
+│   ├── scripts/              # initDb.js, seed.js
+│   └── src/
+│       ├── config/db.js
+│       ├── middleware/       # auth (JWT + roles), errorHandler
+│       ├── utils/loanMath.js # reducing-balance loan calculations
+│       ├── controllers/
+│       ├── routes/
+│       └── index.js
+└── frontend/                 # React (Vite + Tailwind)
+    └── src/
+        ├── lib/              # api client, formatters
+        ├── context/          # AuthContext
+        ├── components/       # Layout, UI primitives
+        └── pages/            # Login, Dashboard, Members, Loans, Instalments, Settings, Users
 ```
 
 ## Features
 
-- **Auth & Roles**: Login with JWT. Roles: Super Admin, Admin, Sub Admin, Manager
-- **Member Management**: CRUD operations, committee roles (President, Secretary, Treasurer, Member)
-- **Loan System**: 
-  - Monthly reducing balance interest
-  - Flexible payments (Full EMI, Interest-only, Partial, Custom amount)
-  - Compound interest on unpaid amounts
-  - Foreclosure (no penalty)
-  - Auto-calculation of tenure & schedule
-- **Monthly Instalments**: Generate & collect monthly contributions with late fine
-- **Dashboard**: Fund overview, collection stats, active loans
-- **Settings**: Configure committee name, instalment amount, interest rate, late fines, grace period
+- **Auth & roles** — JWT login. App roles: `superadmin`, `admin`, `subadmin`, `manager`.
+- **Members** — CRUD with committee roles (`president`, `secretary`, `treasurer`, `member`).
+- **Loans** — monthly reducing-balance interest, fixed monthly payment set at creation,
+  flexible payments (full EMI / interest-only / partial / custom), unpaid interest compounds,
+  foreclosure with no penalty, auto-calculated tenure + live preview.
+- **Instalments** — generate monthly contributions for all active members, record payments,
+  automatic late fine with grace period.
+- **Dashboard** — available fund, active loans, current-month collection, interest earned.
+- **Settings** — committee name, instalment amount, interest rate, late fines, grace period.
 
 ## Setup
 
-### Database (Neon)
-1. Create a Neon PostgreSQL database
-2. Run `db/schema.sql` to create tables
+### 1. Database (Neon)
+Create a Neon PostgreSQL database and copy its connection string.
 
-### Backend
+### 2. Backend
 ```bash
 cd backend
-cp .env.example .env   # Configure DATABASE_URL, JWT_SECRET
+cp .env.example .env          # set DATABASE_URL, JWT_SECRET
 npm install
-npm run dev
+npm run db:init               # apply schema
+npm run db:seed               # create default super-admin
+npm run dev                   # http://localhost:5000
 ```
 
-### Frontend
+### 3. Frontend
 ```bash
 cd frontend
-cp .env.example .env   # Configure VITE_API_URL
+cp .env.example .env          # set VITE_API_URL
 npm install
-npm run dev
+npm run dev                   # http://localhost:5173
 ```
 
 ## Default Login
+Created by `npm run db:seed` (configurable via `.env`):
 - Email: `admin@committee.com`
-- Password: `admin123` (change after first login)
+- Password: `admin123`  *(change after first login)*
 
-## API Endpoints
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/auth/login | Login |
-| POST | /api/auth/register | Register |
-| GET | /api/dashboard/stats | Dashboard stats |
-| GET/POST | /api/members | List/Create members |
-| GET/PUT/DELETE | /api/members/:id | Member CRUD |
-| GET/POST | /api/loans | List/Create loans |
-| POST | /api/loans/:id/payment | Record loan payment |
-| POST | /api/loans/:id/foreclose | Foreclose loan |
-| POST | /api/instalments/generate | Generate monthly instalments |
-| POST | /api/instalments/:id/pay | Record instalment payment |
-| GET/PUT | /api/settings | Committee settings |
-| GET/POST | /api/users | User management |
+## Loan Math (reducing balance)
+- Monthly interest = `remaining_principal × (rate / 100)`
+- A payment first covers interest; the remainder reduces principal.
+- Any unpaid interest is **compounded** (added back to principal).
+- Foreclosure amount = `remaining_principal + current_month_interest` (no penalty).

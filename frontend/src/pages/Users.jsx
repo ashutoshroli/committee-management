@@ -1,176 +1,138 @@
 import { useState, useEffect } from 'react';
-import api from '../utils/api';
 import toast from 'react-hot-toast';
-import { FiPlus, FiEdit, FiTrash2 } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2 } from 'react-icons/fi';
+import api from '../lib/api';
+import { fmtDate } from '../lib/format';
+import { Card, PageTitle, Spinner, Badge, Modal, Field, inputClass } from '../components/ui';
 
-function Users() {
+const EMPTY = { name: '', email: '', password: '', phone: '', role: 'manager' };
+
+export default function Users() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', role: 'manager' });
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(EMPTY);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const load = () => {
+    setLoading(true);
+    api.get('/users')
+      .then((res) => setUsers(res.data.data))
+      .catch(() => toast.error('Failed to load users'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await api.get('/users');
-      setUsers(res.data.data);
-    } catch (error) {
-      toast.error('Failed to fetch users');
-    } finally {
-      setLoading(false);
-    }
+  const openAdd = () => { setEditing(null); setForm(EMPTY); setModal(true); };
+  const openEdit = (u) => {
+    setEditing(u);
+    setForm({ name: u.name, email: u.email, password: '', phone: u.phone || '', role: u.role });
+    setModal(true);
   };
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     try {
-      if (editingUser) {
-        const payload = { name: form.name, email: form.email, phone: form.phone, role: form.role };
-        await api.put(`/users/${editingUser.id}`, payload);
-        toast.success('User updated!');
+      if (editing) {
+        await api.put(`/users/${editing.id}`, { name: form.name, email: form.email, phone: form.phone, role: form.role });
+        toast.success('User updated');
       } else {
         await api.post('/users', form);
-        toast.success('User created!');
+        toast.success('User created');
       }
-      setShowModal(false);
-      setEditingUser(null);
-      setForm({ name: '', email: '', password: '', phone: '', role: 'manager' });
-      fetchUsers();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Operation failed');
+      setModal(false);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Operation failed');
     }
   };
 
-  const handleEdit = (user) => {
-    setEditingUser(user);
-    setForm({ name: user.name, email: user.email, password: '', phone: user.phone || '', role: user.role });
-    setShowModal(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure?')) return;
+  const remove = async (id) => {
+    if (!window.confirm('Delete this user?')) return;
     try {
       await api.delete(`/users/${id}`);
       toast.success('User deleted');
-      fetchUsers();
-    } catch (error) {
-      toast.error('Delete failed');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete failed');
     }
   };
 
-  if (loading) return <div className="text-center py-10">Loading users...</div>;
+  if (loading) return <Spinner label="Loading users..." />;
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">App Users (Login Roles)</h1>
-        <button
-          onClick={() => { setEditingUser(null); setForm({ name: '', email: '', password: '', phone: '', role: 'manager' }); setShowModal(true); }}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
-        >
-          <FiPlus /> Add User
-        </button>
-      </div>
+      <PageTitle
+        title="App Users"
+        action={
+          <button onClick={openAdd} className="bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 flex items-center gap-2">
+            <FiPlus /> Add User
+          </button>
+        }
+      />
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Name</th>
-              <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Email</th>
-              <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Role</th>
-              <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Status</th>
-              <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {users.map(user => (
-              <tr key={user.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 font-medium">{user.name}</td>
-                <td className="px-6 py-4 text-gray-600">{user.email}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs rounded-full capitalize ${
-                    user.role === 'superadmin' ? 'bg-red-100 text-red-700' :
-                    user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                    user.role === 'subadmin' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-700'
-                  }`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {user.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => handleEdit(user)} className="text-yellow-600 hover:text-yellow-800 p-1"><FiEdit size={16} /></button>
-                    <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-800 p-1"><FiTrash2 size={16} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr><Th>Name</Th><Th>Email</Th><Th>Role</Th><Th>Created</Th><Th className="text-right">Actions</Th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {users.map((u) => (
+                <tr key={u.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 font-medium">{u.name}</td>
+                  <td className="px-6 py-4 text-gray-600">{u.email}</td>
+                  <td className="px-6 py-4"><Badge value={u.role} /></td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{fmtDate(u.created_at)}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex justify-end gap-3 text-gray-500">
+                      <button onClick={() => openEdit(u)} className="hover:text-yellow-600"><FiEdit2 /></button>
+                      <button onClick={() => remove(u.id)} className="hover:text-red-600"><FiTrash2 /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">{editingUser ? 'Edit User' : 'Add User'}</h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <input
-                type="text" placeholder="Name *" required value={form.name}
-                onChange={(e) => setForm({...form, name: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
-              <input
-                type="email" placeholder="Email *" required value={form.email}
-                onChange={(e) => setForm({...form, email: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
-              {!editingUser && (
-                <input
-                  type="password" placeholder="Password *" required value={form.password}
-                  onChange={(e) => setForm({...form, password: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              )}
-              <input
-                type="tel" placeholder="Phone" value={form.phone}
-                onChange={(e) => setForm({...form, phone: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
-              <select
-                value={form.role}
-                onChange={(e) => setForm({...form, role: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-              >
+      {modal && (
+        <Modal title={editing ? 'Edit User' : 'Add User'} onClose={() => setModal(false)}>
+          <form onSubmit={submit} className="space-y-3">
+            <Field label="Name *">
+              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+            </Field>
+            <Field label="Email *">
+              <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputClass} />
+            </Field>
+            {!editing && (
+              <Field label="Password *">
+                <input type="password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputClass} />
+              </Field>
+            )}
+            <Field label="Phone">
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputClass} />
+            </Field>
+            <Field label="Role">
+              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className={inputClass}>
                 <option value="superadmin">Super Admin</option>
                 <option value="admin">Admin</option>
                 <option value="subadmin">Sub Admin</option>
                 <option value="manager">Manager</option>
               </select>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">
-                  {editingUser ? 'Update' : 'Create'}
-                </button>
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </Field>
+            <div className="flex gap-3 pt-2">
+              <button type="submit" className="flex-1 bg-brand-600 text-white py-2 rounded-lg hover:bg-brand-700">{editing ? 'Update' : 'Create'}</button>
+              <button type="button" onClick={() => setModal(false)} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300">Cancel</button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );
 }
 
-export default Users;
+function Th({ children, className = '' }) {
+  return <th className={`text-left px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 ${className}`}>{children}</th>;
+}

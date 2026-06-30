@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
+:root {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
 }
